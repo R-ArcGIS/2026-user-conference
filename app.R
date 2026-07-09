@@ -15,7 +15,9 @@ library(dplyr)
 library(purrr)
 library(shiny)
 library(arcgis)
+library(arcgisgeocode)
 library(calcite)
+library(mapgl)
 
 # --- Startup auth (runs once) -------------------------------------------------
 # Runs as the curated `r-bridge-docs` account. No live login in the app.
@@ -125,6 +127,17 @@ ui <- page_actionbar(
     )
   ),
 
+  # Main content area: geocoding results map (hidden until the Geocode tab).
+  calcite_panel(
+    id = "map_panel",
+    heading = "Geocoded results",
+    hidden = TRUE,
+    htmltools::div(
+      style = "position: relative; height: 100%;",
+      maplibreOutput("map", height = "100%")
+    )
+  ),
+
   # Left rail: our three "tabs", plus the authenticated user pinned to the bottom.
   actions = calcite_action_bar(
     id = "nav_bar",
@@ -167,7 +180,25 @@ ui <- page_actionbar(
       id = "geocode_panel",
       heading = "Geocode",
       hidden = TRUE,
-      "Geocoding flow coming soon."
+      calcite_block(
+        heading = "Address field",
+        expanded = TRUE,
+        collapsible = FALSE,
+        uiOutput("geocode_field_select")
+      ),
+      calcite_block(
+        heading = "Run",
+        expanded = TRUE,
+        collapsible = FALSE,
+        calcite_button(
+          "Geocode addresses",
+          id = "geocode_btn",
+          icon_start = "pin",
+          width = "full",
+          appearance = "solid",
+          kind = "brand"
+        )
+      )
     ),
     calcite_panel(
       id = "about_panel",
@@ -183,7 +214,7 @@ ui <- page_actionbar(
         heading = "Profile",
         expanded = TRUE,
         collapsible = FALSE,
-        calcite_table(data = user_df, caption = "User")
+        calcite_table(id = "user_info_tbl", data = user_df, caption = "User")
       )
     )
   )
@@ -215,6 +246,10 @@ server <- function(input, output, session) {
       for (panel in panel_for) {
         update_calcite(panel, hidden = panel != target)
       }
+
+      # Main content area: show the map on Geocode, the preview otherwise.
+      update_calcite("map_panel", hidden = clicked != "Geocode")
+      update_calcite("preview_panel", hidden = clicked == "Geocode")
 
       # Render the profile table only when the user action is clicked.
       if (target == "user_panel") {
@@ -309,6 +344,7 @@ server <- function(input, output, session) {
       df <- csv_data()
       req(df)
       return(calcite_table(
+        id = "data_preview",
         data = utils::head(df, 20),
         caption = row$title
       ))
@@ -326,8 +362,79 @@ server <- function(input, output, session) {
     if (inherits(preview, "sf")) {
       preview <- sf::st_drop_geometry(preview)
     }
-    calcite_table(data = preview, caption = chosen_name)
+    calcite_table(id = "data_preview", data = preview, caption = chosen_name)
   })
+
+  # --- Geocoding ---------------------------------------------------------------
+  # Field picker: the columns of the selected CSV (character columns first).
+  output$geocode_field_select <- renderUI({
+    df <- csv_data()
+    if (is.null(df)) {
+      return(calcite_notice(
+        open = TRUE,
+        kind = "info",
+        width = "full",
+        message = "Select a CSV in the Content tab to geocode one of its fields."
+      ))
+    }
+    cols <- names(df)
+    calcite_select(
+      id = "geocode_field",
+      label = "Address field",
+      values = cols,
+      labels = cols,
+      value = cols[[1]]
+    )
+  })
+
+  # Geocode the chosen field on button click (1 candidate each, no credits).
+  geocoded <- reactiveVal(NULL)
+
+  observeEvent(input$geocode_btn$clicks, {
+    req(input$geocode_btn$clicks > 0)
+    df <- csv_data()
+    req(df, input$geocode_field$value)
+
+    field <- input$geocode_field$value
+    logger::log_info("geocoding {nrow(df)} rows on field '{field}'")
+
+    result <- find_address_candidates(
+      address = as.character(df[[field]]),
+      max_locations = 1L
+    )
+    logger::log_info("geocoded {nrow(result)} candidates")
+    # Keep only simple columns mapgl can serialize to GeoJSON.
+    result <- result[, c("match_addr", "score")] |>
+      dplyr::filter(!sf::st_is_empty(result))
+    geocoded(result)
+  })
+
+  # Render the geocoded points on a map.
+  output$map <- renderMaplibre({
+    pts <- geocoded()
+    m <- maplibre(
+      esri_style("streets", token = arc_token()),
+      attributionControl = FALSE
+    )
+    if (is.null(pts) || nrow(pts) == 0) {
+      return(m)
+    }
+    m |>
+      add_circle_layer(
+        id = "geocoded",
+        source = pts,
+        circle_color = "#007ac2",
+        circle_stroke_color = "#00465c",
+        circle_stroke_width = 0.5,
+        circle_radius = 6,
+        circle_opacity = 0.85
+      ) |>
+      fit_bounds(pts, animate = FALSE)
+  })
+
+  # These outputs live in panels that start hidden; render them anyway.
+  outputOptions(output, "geocode_field_select", suspendWhenHidden = FALSE)
+  outputOptions(output, "map", suspendWhenHidden = FALSE)
 }
 
 shinyApp(ui, server)
