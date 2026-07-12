@@ -1,31 +1,17 @@
-# Putting the R in ArcGIS — Esri UC 2026 demo
-# Read-only ArcGIS Online content browser, built entirely in R with the
-# R-ArcGIS Bridge + Calcite. See PLAN-APP.md for the full scope.
-#
-# This file is the PAGE SKELETON only: action-bar navigation between three
-# panels (Content / Geocode / About), all empty. No item listing / data yet.
-#
-# Docs:
-# https://r.esri.com/arcgisutils/llms.txt
-# https://r.esri.com/arcgislayers/llms.txt
-# https://r.esri.com/arcgisgeocode/llms.txt
-# https://r.esri.com/calcite/llms.txt
-
+library(mapgl)
 library(dplyr)
 library(purrr)
 library(shiny)
-library(arcgis)
-library(arcgisgeocode)
 library(calcite)
-library(mapgl)
+library(arcgisutils)
+library(arcgislayers)
+library(arcgisgeocode)
 
-# --- Startup auth (runs once) -------------------------------------------------
-# Runs as the curated `r-bridge-docs` account. No live login in the app.
+
 set_arc_token(auth_user(expiration = 120))
 
 user <- arc_user_self()
 
-# Fields from arc_user_self() worth surfacing, as a two-column data.frame.
 user_df <- data.frame(
   property = c(
     "Full name",
@@ -59,11 +45,8 @@ user_df <- data.frame(
 )
 
 
-# --- User content (fetched once at startup) -----------------------------------
 all_items <- arc_user_content(user)
 
-# Preferred display order for item types; anything else follows, in the order
-# it appears in the data.
 type_order <- c(
   "Feature Service",
   "File Geodatabase",
@@ -77,16 +60,13 @@ item_types <- c(
   setdiff(present_types, type_order)
 )
 
-# Each item is a calcite_tile with a stable id. The tile fires `input$<id>` on
-# every click (event priority), so the server can observe each one directly.
 tile_input_id <- function(item_id) sprintf("tile_%s", item_id)
 
-# One accordion section per type, holding a tile group of that type's items.
 content_browser <- calcite_accordion(
   id = "my_accordion",
-  !!!map(item_types, function(this_type) {
+  !!!lapply(item_types, function(this_type) {
     items <- all_items[all_items$type == this_type, ]
-    tiles <- map(seq_len(nrow(items)), function(i) {
+    tiles <- lapply(seq_len(nrow(items)), function(i) {
       calcite_tile(
         id = tile_input_id(items$id[[i]]),
         heading = items$title[[i]],
@@ -107,7 +87,6 @@ content_browser <- calcite_accordion(
 ui <- page_actionbar(
   title = "Putting the R in ArcGIS",
 
-  # Main content area: preview of the selected item.
   calcite_panel(
     id = "preview_panel",
     heading = "Preview",
@@ -127,7 +106,6 @@ ui <- page_actionbar(
     )
   ),
 
-  # Main content area: geocoding results map (hidden until the Geocode tab).
   calcite_panel(
     id = "map_panel",
     heading = "Geocoded results",
@@ -138,15 +116,13 @@ ui <- page_actionbar(
     )
   ),
 
-  # Left rail: our three "tabs", plus the authenticated user pinned to the bottom.
   actions = calcite_action_bar(
     id = "nav_bar",
     calcite_action_group(
       calcite_action(
         text = "Content",
         icon = "data",
-        text_enabled = TRUE,
-        active = TRUE
+        text_enabled = TRUE
       ),
       calcite_action(
         text = "Geocode",
@@ -156,7 +132,8 @@ ui <- page_actionbar(
       calcite_action(
         text = "About",
         icon = "information",
-        text_enabled = TRUE
+        text_enabled = TRUE,
+        active = TRUE
       )
     ),
     calcite_action_group(
@@ -169,7 +146,6 @@ ui <- page_actionbar(
     )
   ),
 
-  # One panel per tab; only "Content" visible to start.
   panel_content = list(
     calcite_panel(
       id = "content_panel",
@@ -204,7 +180,48 @@ ui <- page_actionbar(
       id = "about_panel",
       heading = "About",
       hidden = TRUE,
-      "About the R-ArcGIS Bridge pipeline coming soon."
+      calcite_notice(
+        open = TRUE,
+        kind = "brand",
+        width = "full",
+        htmltools::tags$div(slot = "title", "Putting the R in ArcGIS"),
+        htmltools::tags$div(
+          slot = "message",
+          "This whole app is written in R with the R-ArcGIS Bridge and Calcite."
+        )
+      ),
+      calcite_block(
+        heading = "arcgisutils",
+        description = "Authentication",
+        expanded = TRUE,
+        collapsible = TRUE,
+        icon_start = "key",
+        "Signs in and manages the token every request uses."
+      ),
+      calcite_block(
+        heading = "arcgislayers",
+        description = "Content and data",
+        expanded = TRUE,
+        collapsible = TRUE,
+        icon_start = "layers",
+        "Lists your items, opens services, and reads their data into R."
+      ),
+      calcite_block(
+        heading = "arcgisgeocode",
+        description = "Geocoding",
+        expanded = TRUE,
+        collapsible = TRUE,
+        icon_start = "pin",
+        "Turns a column of addresses into mapped points."
+      ),
+      calcite_block(
+        heading = "calcite",
+        description = "Interface",
+        expanded = TRUE,
+        collapsible = TRUE,
+        icon_start = "apps",
+        "Builds the entire UI from Esri's Calcite Design System."
+      )
     ),
     calcite_panel(
       id = "user_panel",
@@ -222,36 +239,33 @@ ui <- page_actionbar(
 
 
 # --- Server -------------------------------------------------------------------
-# Every action-bar item maps to the panel it reveals. The bottom user action
-# uses the full name as its text, so key it off user$fullName.
-panel_for <- c(
+panel_names <- c(
   "Content" = "content_panel",
   "Geocode" = "geocode_panel",
   "About" = "about_panel"
 )
-panel_for[[user$fullName]] <- "user_panel"
+panel_names[[user$fullName]] <- "user_panel"
 
 server <- function(input, output, session) {
+  logger::log_shiny_input_changes(input)
   observeEvent(
     input$nav_bar,
     {
       clicked <- input$nav_bar
       logger::log_info("nav_bar clicked: {clicked}")
-      target <- panel_for[[clicked]]
+      target <- panel_names[[clicked]]
       if (is.null(target)) {
         logger::log_debug("no panel mapped to '{clicked}', ignoring")
         return()
       }
       logger::log_info("showing panel: {target}")
-      for (panel in panel_for) {
+      for (panel in panel_names) {
         update_calcite(panel, hidden = panel != target)
       }
 
-      # Main content area: show the map on Geocode, the preview otherwise.
       update_calcite("map_panel", hidden = clicked != "Geocode")
       update_calcite("preview_panel", hidden = clicked == "Geocode")
 
-      # Render the profile table only when the user action is clicked.
       if (target == "user_panel") {
         logger::log_info("rendering user_info table ({nrow(user_df)} rows)")
         output$user_info <- renderUI({
@@ -262,12 +276,8 @@ server <- function(input, output, session) {
     ignoreInit = TRUE
   )
 
-  # The currently selected item id (NULL until something is clicked).
   selected_item <- reactiveVal(NULL)
 
-  logger::log_shiny_input_changes(input)
-
-  # One observer per tile. Each tile fires `input$tile_<id>` on click.
   walk(all_items$id, function(item_id) {
     observeEvent(input[[tile_input_id(item_id)]], {
       logger::log_info("item selected: {item_id}")
@@ -275,14 +285,11 @@ server <- function(input, output, session) {
     })
   })
 
-  # The selected item's metadata row from all_items.
   selected_row <- reactive({
     req(selected_item())
     all_items[all_items$id == selected_item(), ]
   })
 
-  # Open the selected Feature Service and pull its layers + tables (once per
-  # selection). Non-feature-service items yield NULL.
   service_layers <- reactive({
     row <- selected_row()
     if (row$type != "Feature Service" || is.na(row$url)) {
@@ -293,7 +300,6 @@ server <- function(input, output, session) {
     get_all_layers(server_obj)
   })
 
-  # Read the selected CSV item into a data frame. Non-CSV items yield NULL.
   csv_data <- reactive({
     row <- selected_row()
     if (row$type != "CSV") {
@@ -304,7 +310,6 @@ server <- function(input, output, session) {
     readr::read_csv(I(raw_txt), show_col_types = FALSE)
   })
 
-  # A flat named list of selectable layers/tables: name -> opened object.
   layer_choices <- reactive({
     all_layers <- service_layers()
     if (is.null(all_layers)) {
@@ -314,7 +319,6 @@ server <- function(input, output, session) {
     set_names(flat, map_chr(flat, ~ .x$name))
   })
 
-  # Layer picker: only for feature services with >0 layers/tables.
   output$layer_select <- renderUI({
     choices <- layer_choices()
     if (is.null(choices) || length(choices) == 0) {
@@ -335,11 +339,8 @@ server <- function(input, output, session) {
     )
   })
 
-  # Preview: a CSV's rows, or the chosen layer's first 20 rows.
   output$preview_table <- renderUI({
     row <- selected_row()
-
-    # CSV items: preview the parsed rows directly.
     if (row$type == "CSV") {
       df <- csv_data()
       req(df)
@@ -350,7 +351,6 @@ server <- function(input, output, session) {
       ))
     }
 
-    # Feature Services: preview the chosen layer/table.
     choices <- layer_choices()
     req(choices)
     chosen_name <- input$layer_choice$value %||% names(choices)[[1]]
@@ -358,15 +358,13 @@ server <- function(input, output, session) {
     req(lyr)
     logger::log_info("previewing layer: {chosen_name}")
     preview <- arc_select(lyr, n_max = 20)
-    # Tables have no geometry; only drop it when present.
+
     if (inherits(preview, "sf")) {
       preview <- sf::st_drop_geometry(preview)
     }
     calcite_table(id = "data_preview", data = preview, caption = chosen_name)
   })
 
-  # --- Geocoding ---------------------------------------------------------------
-  # Field picker: the columns of the selected CSV (character columns first).
   output$geocode_field_select <- renderUI({
     df <- csv_data()
     if (is.null(df)) {
@@ -387,7 +385,6 @@ server <- function(input, output, session) {
     )
   })
 
-  # Geocode the chosen field on button click (1 candidate each, no credits).
   geocoded <- reactiveVal(NULL)
 
   observeEvent(input$geocode_btn$clicks, {
@@ -400,26 +397,36 @@ server <- function(input, output, session) {
 
     result <- find_address_candidates(
       address = as.character(df[[field]]),
-      max_locations = 1L
+      max_locations = 1L,
+      country_code = "USA"
     )
     logger::log_info("geocoded {nrow(result)} candidates")
-    # Keep only simple columns mapgl can serialize to GeoJSON.
     result <- result[, c("match_addr", "score")] |>
       dplyr::filter(!sf::st_is_empty(result))
     geocoded(result)
   })
 
-  # Render the geocoded points on a map.
+  # ATL
+  atlanta_bounds <- c(
+    -84.7727083063896,
+    33.4084348432,
+    -84.1047085969419,
+    34.1616133255456
+  )
+
   output$map <- renderMaplibre({
-    pts <- geocoded()
-    m <- maplibre(
+    maplibre(
       esri_style("streets", token = arc_token()),
+      bounds = atlanta_bounds,
       attributionControl = FALSE
     )
-    if (is.null(pts) || nrow(pts) == 0) {
-      return(m)
-    }
-    m |>
+  })
+
+  observeEvent(geocoded(), {
+    pts <- geocoded()
+    req(!is.null(pts), nrow(pts) > 0)
+    maplibre_proxy("map") |>
+      clear_layer("geocoded") |>
       add_circle_layer(
         id = "geocoded",
         source = pts,
@@ -429,12 +436,19 @@ server <- function(input, output, session) {
         circle_radius = 6,
         circle_opacity = 0.85
       ) |>
-      fit_bounds(pts, animate = FALSE)
+      fit_bounds(pts, animate = TRUE)
   })
 
-  # These outputs live in panels that start hidden; render them anyway.
-  outputOptions(output, "geocode_field_select", suspendWhenHidden = FALSE)
-  outputOptions(output, "map", suspendWhenHidden = FALSE)
+  outputOptions(
+    output,
+    "geocode_field_select",
+    suspendWhenHidden = FALSE
+  )
+  outputOptions(
+    output,
+    "map",
+    suspendWhenHidden = FALSE
+  )
 }
 
 shinyApp(ui, server)
