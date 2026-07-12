@@ -398,6 +398,8 @@ server <- function(input, output, session) {
     result <- find_address_candidates(
       address = as.character(df[[field]]),
       max_locations = 1L,
+      city = "Atlanta",
+      subregion = "GA",
       country_code = "USA"
     )
     logger::log_info("geocoded {nrow(result)} candidates")
@@ -416,7 +418,7 @@ server <- function(input, output, session) {
 
   output$map <- renderMaplibre({
     maplibre(
-      esri_style("streets", token = arc_token()),
+      esri_style("navigation", token = arc_token()),
       bounds = atlanta_bounds,
       attributionControl = FALSE
     )
