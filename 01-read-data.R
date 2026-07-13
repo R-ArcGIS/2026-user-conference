@@ -52,14 +52,13 @@ relevant_fields <- c(
 # `geometry = FALSE` ensures that geometry is returned
 # this is useful for exploring the attributes before querying geometries
 # Note: this may take 10-45 seconds
-oaks <- arc_select(
-  trees_layer,
-  fields = relevant_fields,
-  where = "GENUS_NAME = 'Quercus'",
-  geometry = FALSE
-)
-nrow(oaks)
-
+# oaks <- arc_select(
+#   trees_layer,
+#   fields = relevant_fields,
+#   where = "GENUS_NAME = 'Quercus'",
+#   geometry = FALSE
+# )
+# nrow(oaks)
 
 # we will subset to only ward 2 for a much more managable dataset
 # each request needs to send all of the rows over the internet
@@ -71,7 +70,7 @@ oaks <- arc_select(
 )
 
 # we now get ~14k features
-nrow(oaks)
+# nrow(oaks)
 
 # make a quick plot to check your data
 mapgl::maplibre_view(oaks, column = "COMMON_NAME")
@@ -80,23 +79,17 @@ mapgl::maplibre_view(oaks, column = "COMMON_NAME")
 # Publish the Ward 2 oaks as a new hosted layer --------------------------
 
 # authenticate so we can publish content to our portal
-set_arc_token(auth_user())
+set_arc_token(auth_user(expiration = 120))
 
 # give the published layer a unique name so it doesn't collide with
 # everyone else's copy at the workshop
 layer_name <- sprintf("trees-%s", ulid::ulid())
 
-# track when each row was added so later demos can tell the original
-# inventory apart from citizen reports added on top of it
-oaks$modified_at <- Sys.time()
 
 published <- publish_layer(
-  oaks,
+  # track when the data was modified
+  mutate(oaks, modified_at = Sys.time(), .before = geometry),
   title = layer_name
 )
 
 published
-
-# this is the layer the rest of the workshop builds on:
-# Module 2 opens it by searching for `layer_name`, and later demos
-# add citizen-reported trees and route crews to it

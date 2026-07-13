@@ -1,81 +1,46 @@
-# Putting the R in ArcGIS — Outline
 
-Scenario: DC Department of Urban Forestry. Residents report problem trees
-via Survey123 at the top of the session; the workshop builds a hosted
-tree inventory, grows it live from those reports, and finishes by routing
-crews to the newly reported trees.
+## LLM Text
 
-## Session flow
 
-- **Kickoff — Survey123**
-  - Audience submits DC tree problem reports live (geometry + request
-    type only, no attachments/photos — the form doesn't support them by
-    design)
-  - QR code on slide, extent-locked to DC, streams to a hosted layer
+Locked in. Here's the revised outline reflecting your four calls — the biggest change is dropping the {arcgisbinding} live demo (now a slide mention only), which actually tightens the session: everything now stays in the R console + web app + ArcGIS Online, with no context-switch out to ArcGIS Pro.
+Putting the R in ArcGIS — Final Outline (v2)
+Scenario: DC Department of Urban Forestry. Residents report problem trees; the audience files those requests live via Survey123 at the top, and in the finale we reverse-geocode and route crews to their exact points.
+Time budget (~42 min + 3 min live-demo buffer = 45; ~15 left for Q&A)
+#	Section	Owner	Min
+1	Survey123 kickoff — audience drops a DC tree request	Both	3
+2	
+What is the R-ArcGIS Bridge? + What's new (routing) — {arcgisbinding}/GP-service shown here as a capability
+	Josiah	5
+3	App reveal — the Calcite/Shiny "mini AGOL in R" (motivate)	Josiah	3
+4	Demo B — {arcgislayers}: read/write feature services (filter + SQL, edit, publish)	Martha	6
+5	Demo C — {arcgisutils} + attachments: portal search → download the audience's Survey123 records & photos	Josiah	6
+6	Demo D — {arcgisgeocode}: reverse-geocode the audience points	Martha	4
+7	Demo E — {arcgisrouting} FINALE: isochrones → VRP → publish route layer	Josiah	9
+8	Back to the app + survey — audience requests now served	Both	3
+9	Resources & wrap	Both	3
+What changed from v1
 
-- **What is the R-ArcGIS Bridge** (existing slides, capability grid incl.
-  `{arcgisrouting}`)
+Routing finale = two beats: (a) travel-time isochrones from the crew depot to assign requests to drive-time bands, then (b) Vehicle Routing Problem to build the optimized multi-stop crew route and publish it back to AGOL.
+Live-with-guardrails is baked into the kickoff + finale (details below).
+Guardrails for the live audience data
+Survey123 form is extent-locked to DC; points stream to a hosted layer, viridis by request type.
+Collected at the very start so there's ~35 min of runway before the finale needs them.
+Finale caps/samples to N stops, snaps/clips to the DC extent, and falls back to a pre-seeded request set if too few submit — the solve is never allowed to break on stage.
+Speaker split (proposed, easily adjustable)
+Josiah: app reveal → portal + attachments → routing finale (one continuous arc).
+Martha: {arcgislayers} read/write + reverse-geocode.
+Shared: kickoff, framing, wrap. (Happy to shift more stage time to you if you'd like.)
+Deck actions
+Add {arcgisrouting} to the capability grids (slides 9/24) and build real finale slides from the placeholder demo layouts (45–48).
+Keep: capability grids, package one-pagers (10–11, 35–39), what's-new (25), what's-coming (26), summary/resources (16, 18).
+Re-thread demo slides (12–15) onto the single DC tree-request story; park the unused template block (40–69).
+This gives us a clean, flashy spine end-to-end. I'd suggest we build the Shiny app + R demo scripts next, since the slide demo sections should wrap around whatever the code actually shows on screen — then the slides come together fast. Say the word and I'll start on the demo code, or if you'd rather shape up the slides first, I can go there instead.
 
-- **App reveal** — mini-AGOL Shiny app (motivate, showcases
-  `arcgislayers`/`arcgisgeocode`/`calcite`)
 
-- **Demo 1 — Read + Publish** (`01-read-data.R`)
-  - Connect to public DC tree inventory (no auth), explore fields
-  - Filter to oaks, Ward 2
-  - Stamp a `modified_at` column
-  - Publish subset as a new hosted layer: `sprintf("trees-%s", ulid::ulid())`
-  - → this published layer becomes "the arborist inventory" the rest of
-    the session acts on
+## Outline
 
-- **Demo 2 — Portal + Content Browsing** (`02-connect-to-arcgis-online.R`)
-  - `.Renviron` + `auth_user()` portal auth
-  - Browse user/groups
-  - `search_items()` to find the layer just published in Demo 1
-    (continuity beat)
-  - Spatial filter against the "Arborist Zones" boundary layer
-
-- **Demo 3 — Attachments aside** (`03-attachments.R`)
-  - Explicit "different capability, different dataset" callout — this
-    workshop's Survey123 form has no attachments by design
-  - Canned/old attachment dataset: `query_layer_attachments`,
-    `download_attachments`
-  - Quick, honest aside — not forced into the live-data story
-
-- **Demo 4 — Add features from citizen reports** (`04-add-features.R`)
-  - Pull the audience's live Survey123 tree reports
-  - Stamp `modified_at`, align schema to the trees layer
-  - `add_features()` the reports into the layer published in Demo 1
-  - Payoff: "the arborist inventory grows live from citizen reports"
-
-- **Demo 5 — Reverse geocode** (`05-reverse-geocode.R`)
-  - Reverse-geocode the trees layer's points to get addresses
-  - Duplicates from re-running are fine — live demo, not production data
-
-- **Demo 6 — Routing finale** (`06-routing-finale.R`)
-  - Cap/sample citizen-reported stops (fallback to a pre-seeded set if
-    too few submissions — the solve is never allowed to break on stage)
-  - `find_service_areas()` — isochrones from the crew depot
-  - `route_vehicles()` — VRP, optimized multi-stop crew route
-  - `publish_layer()` the resulting route back to AGOL
-
-- **Back to the app + survey** — audience requests now served, shown in
-  the app
-
-- **Resources & wrap**
-
-## Open items
-
-- `04-add-features.R`: real field mapping between the Survey123 report
-  schema and the trees layer schema (currently a TODO/placeholder)
-- `06-routing-finale.R`: real DC Urban Forestry depot coordinates, and a
-  pre-seeded fallback stop set for the low-submission guardrail
-- Confirm `publish_layer()`'s return shape so later demos can grab the
-  item id directly instead of via `search_items()`
-
-## Reference demos
-
-- `/Users/josiahparry/github/r-bridge/2026-dev-summit/full-stack-spatial/*.R`
-- `/Users/josiahparry/github/r-bridge/2026-dev-summit/r-powered-arcgis-apps/*.R`
-- `/Users/josiahparry/github/r-bridge/2025-dev-summit/04-survey123-attachments.R`
-- `/Users/josiahparry/github/r-bridge/2025-user-conference/attachments.R`
-- `/Users/josiahparry/github/r-bridge/2025-user-conference/happy-place.R`
+- Survey123 post (put the qr code in the slides)
+- What is the R-ArcGIS Bridge (exisiting slides)
+- mini AGOL shiny app
+  - I want to mativate this sesssion by first starting with an demo of a full stack shiny application that is made with the R-ArcGIS Bridge
+  - This application demonstrates only _some_ of the breadth of the R-ArcGIS Bridge. Notably it demonstrates the following packages (read from the about page)
