@@ -1,8 +1,10 @@
 library(dplyr)
 library(arcgis)
 
-
-dc_items <- search_items("DC Tree Pruning Requests", owner = "mbass_ANGP")
+dc_items <- search_items(
+  "DC Tree Pruning Requests",
+  owner = "mbass_ANGP"
+)
 
 # preview items
 dc_items |>
@@ -27,7 +29,6 @@ to_geocode <- arc_open(item_id) |>
   get_layer(0) |>
   arc_select()
 
-
 locs <- reverse_geocode(to_geocode$geometry)
 
-map <- mapgl::mapboxgl_view(locs)
+mapgl::mapboxgl_view(locs)

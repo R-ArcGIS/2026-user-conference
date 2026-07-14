@@ -3,6 +3,7 @@ library(dplyr)
 library(arcgis)
 library(ggplot2)
 
+set_arc_token(auth_user())
 
 # confirm your user
 me <- arc_user_self()
