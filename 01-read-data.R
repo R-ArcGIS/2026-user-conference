@@ -7,11 +7,7 @@
 # load the required R packages
 library(sf)
 library(dplyr)
-library(arcgislayers)
-
-# Run the below to clear an expired authentication token
-# or run into authentication permissions
-unset_arc_token()
+library(arcgis)
 
 # store the item ID of the tree's layer
 trees_id <- "08bda06465a74cd59a6d4231d882588d"
@@ -30,6 +26,8 @@ mapserver_url <- httr2::url_modify_relative(trees_layer$url, ".")
 # open the mapserver to see all layers available
 arc_open(mapserver_url)
 
+# Preview the trees_layer
+arc_select(trees_layer, n_max = 100)
 
 # Query and explore the trees --------------------------------------------
 
@@ -70,7 +68,7 @@ oaks <- arc_select(
 )
 
 # we now get ~14k features
-# nrow(oaks)
+nrow(oaks)
 
 # make a quick plot to check your data
 mapgl::maplibre_view(oaks, column = "COMMON_NAME")

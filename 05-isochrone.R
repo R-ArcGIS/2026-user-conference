@@ -1,3 +1,5 @@
+library(arcgis)
+library(sf)
 library(arcgisrouting)
 
 set_arc_token(auth_user())
@@ -24,7 +26,7 @@ isochrone_job$start()
 isochrone_job$status
 
 # get the results
-isochrone_job$results
+# isochrone_job$results
 
 # if we wanted to just wait until it is complete
 # and fetch results at one time
