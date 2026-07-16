@@ -20,9 +20,7 @@ item_id <- dc_items |>
   pull(id)
 
 item <- arc_item(item_id)
-
-# how many views?
-item$numViews
+str(item, 1)
 
 # read all responses
 to_geocode <- arc_open(item_id) |>
