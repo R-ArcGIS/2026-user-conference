@@ -1,6 +1,7 @@
 library(sf)
 library(dplyr)
 library(arcgis)
+library(mapgl)
 
 # authenticate
 set_arc_token(auth_user())
